@@ -15,6 +15,9 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 
 SHEETS_WEBHOOK = "https://script.google.com/macros/s/AKfycbzKLNWCh5d9SSrQzc2NtpjIyW_tQcm5jmuIrrH_SDD5QPDUFbSR7vALVRcUvxHht-O3/exec"
 
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 print("🚀 Forex Opportunity Radar Starting...\n")
 
 
@@ -73,11 +76,9 @@ Return ONLY valid JSON.
 
     try:
         response = requests.post(url, json=payload, timeout=60)
-
         result = response.json()
 
         text = result["candidates"][0]["content"]["parts"][0]["text"]
-
         text = text.replace("```json", "").replace("```", "").strip()
 
         return json.loads(text)
@@ -85,6 +86,51 @@ Return ONLY valid JSON.
     except Exception as e:
         print(f"❌ Gemini Error: {e}")
         return None
+
+
+def send_to_telegram(data):
+    message = f"""
+🚨 NEW FOREX SaaS OPPORTUNITY
+
+💡 Idea
+{data.get('saas_idea','')}
+
+🔥 Pain
+{data.get('pain_score',0)}/10
+
+📈 Frequency
+{data.get('frequency_score',0)}/10
+
+💰 Willingness To Pay
+{data.get('wtp_score',0)}/10
+
+🧩 Core Problem
+{data.get('core_problem','')}
+
+🏆 Recommendation
+{data.get('recommendation','')}
+
+📰 Headline
+{data.get('post_title','')}
+
+🔗
+{data.get('discussion_link','')}
+"""
+
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": message
+            },
+            timeout=30
+        )
+
+        print(f"📲 Telegram: {response.status_code}")
+
+    except Exception as e:
+        print(f"❌ Telegram Error: {e}")
 
 
 def send_to_sheets(data):
@@ -95,7 +141,7 @@ def send_to_sheets(data):
             timeout=30
         )
 
-        print(f"📤 Sent to Google Sheets: {response.status_code}")
+        print(f"📤 Google Sheets: {response.status_code}")
 
     except Exception as e:
         print(f"❌ Sheets Error: {e}")
@@ -111,18 +157,16 @@ for feed_url in RSS_FEEDS:
         print("❌ No articles found")
         continue
 
-    print(f"✅ Found {len(feed.entries)} articles\n")
+    print(f"✅ Found {len(feed.entries)} articles")
 
     for article in feed.entries[:5]:
 
         title = article.title
         link = article.link
-
         source = "Google News"
 
         print("=" * 80)
-        print(f"📰 Title : {title}")
-        print(f"🔗 Link  : {link}")
+        print(title)
 
         analysis = analyze_with_gemini(
             title=title,
@@ -132,8 +176,9 @@ for feed_url in RSS_FEEDS:
 
         if analysis:
 
-            print("\n🤖 Gemini Analysis:")
             print(json.dumps(analysis, indent=2))
+
+            send_to_telegram(analysis)
 
             send_to_sheets(analysis)
 
